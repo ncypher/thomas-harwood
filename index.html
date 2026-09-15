@@ -30,7 +30,7 @@
 <g class="f-person" data-person="2"><circle cx="534" cy="246" r="6"/><path d="M521 264Q521 254 534 254Q547 254 547 264"/><text x="557" y="260">LEAD</text></g>
 <g class="f-observation"><path d="M0 71V315"/><circle cy="180" r="3"/><text x="7" y="310">OBSERVE</text></g>
 <g class="f-core"><circle cx="250" cy="180" r="87" fill="url(#foundry-halo)"/><path class="f-braces" d="M233 148H230Q225 148 225 156V169Q225 180 219 180Q225 180 225 191V204Q225 212 230 212H233M267 148H270Q275 148 275 156V169Q275 180 281 180Q275 180 275 191V204Q275 212 270 212H267"/><circle cx="250" cy="180" r="3" class="f-center"/><text x="250" y="236" text-anchor="middle">ABSTRACTION</text></g>
-<g class="f-loop"><path id="f-loop-path" d="M214 282C214 260 286 260 286 282C286 304 214 304 214 282"/><circle cx="214" cy="282" r="3"/><circle cx="286" cy="282" r="3"/><path d="M247 267L253 267 249 263M253 297H247L251 301"/><text x="201" y="285" text-anchor="end">HUMAN</text><text x="299" y="285">AI</text><text x="250" y="321" text-anchor="middle" class="f-small">OBSERVE · SHAPE · VERIFY</text><circle class="f-loop-pulse" r="3"/></g>
+<g class="f-loop"><path id="f-loop-path" d="M214 282C214 260 286 260 286 282C286 304 214 304 214 282"/><circle class="f-human-halo" cx="214" cy="282" r="5"/><circle class="f-ai-halo" cx="286" cy="282" r="5"/><circle class="f-human-node" cx="214" cy="282" r="3"/><circle class="f-ai-node" cx="286" cy="282" r="3"/><path d="M247 267L253 267 249 263M253 297H247L251 301"/><text class="f-human-label" x="201" y="285" text-anchor="end">HUMAN</text><text class="f-ai-label" x="299" y="285">AI</text><text x="250" y="321" text-anchor="middle" class="f-small">OBSERVE · SHAPE · VERIFY</text><circle class="f-loop-tail tail-one" r="2.2"/><circle class="f-loop-tail tail-two" r="1.6"/><circle class="f-loop-pulse" r="3.5"/></g>
 <g class="f-packets" aria-hidden="true"></g>
 <text class="f-caption" x="310" y="365" text-anchor="middle">Fragmented systems. Incomplete decisions.</text>
 </svg></div>
@@ -72,7 +72,7 @@
     const connect = clamp((t - 9) / 3);
     const fade = t > 21 ? 22 - t : 1;
     core.style.opacity = reveal * fade;
-    loop.style.opacity = reveal * fade * (connect === 1 ? .6 : 1);
+    loop.style.opacity = reveal * fade;
     routes.style.opacity = .05 + connect * .8 * fade;
     paths.forEach((p, i) => {
       p.style.strokeDasharray = lengths.get(p);
@@ -87,7 +87,29 @@
     stages.forEach((el, i) => el.classList.toggle('active', i === stage));
     const words = t < 4 ? 'Fragmented systems. Incomplete decisions.' : t < 8 ? 'Observe the work. Find the missing layer.' : t < 12 ? 'Human judgment. AI collaboration.' : 'The right information. Where it belongs.';
     if (caption.textContent !== words) caption.textContent = words;
-    place(q('.f-loop-pulse'), circuit, (t % 2.6) / 2.6, t > 7 && t < 12 ? 1 : 0);
+    // Human guides the upper arc; AI returns its work along the lower arc.
+    // Keep exchanging after the system connects: orchestration is ongoing.
+    const exchange = ((Math.max(0, t - 7) % 3.6) / 3.6);
+    const loopVisible = t >= 7 && t < 21 ? 1 : 0;
+    const exchangeColor = exchange < .5 ? '#f0a53c' : '#4ee6ef';
+    const bead = q('.f-loop-pulse');
+    place(bead, circuit, exchange, loopVisible);
+    bead.style.fill = exchangeColor;
+    ['.tail-one', '.tail-two'].forEach((selector, i) => {
+      const tail = q(selector);
+      place(tail, circuit, (exchange - .035 * (i + 1) + 1) % 1, loopVisible * (.5 - i * .15));
+      tail.style.fill = exchangeColor;
+    });
+    const humanReceipt = Math.pow(Math.max(0, 1 - Math.min(exchange, 1-exchange) * 9), 2);
+    const aiReceipt = Math.pow(Math.max(0, 1 - Math.abs(exchange - .5) * 9), 2);
+    [['human', humanReceipt, '#f0a53c'], ['ai', aiReceipt, '#4ee6ef']].forEach(([side, receipt, color]) => {
+      const halo = q('.f-' + side + '-halo');
+      halo.setAttribute('r', 5 + (1 - receipt) * 9);
+      halo.style.opacity = receipt * .8;
+      halo.style.stroke = color;
+      q('.f-' + side + '-node').style.fill = color;
+      q('.f-' + side + '-label').style.fill = receipt > .25 ? color : '#a6c5c9';
+    });
     particles.forEach((el, i) => {
       el.style.opacity = 0;
       if (t < 7 && i < 6) {
