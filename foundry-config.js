@@ -1,3 +1,4 @@
-// Public configuration only. Never put an API key here.
-// After deploying the Worker, paste its HTTPS URL ending in /api/foundry.
-window.HARWOOD_FOUNDRY_CONFIG = Object.freeze({ apiUrl: '' });
+// Public endpoint only. The Gemini key stays in Cloudflare Secrets.
+window.HARWOOD_FOUNDRY_CONFIG = Object.freeze({
+  apiUrl: 'https://thomas-harwood-site.tharwood75.workers.dev/api/foundry'
+});
