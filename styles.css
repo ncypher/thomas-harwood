@@ -16,3 +16,6 @@ footer{max-width:1440px;margin:auto;padding:clamp(5rem,9vw,8rem) clamp(1.25rem,4
 
 /* Visible, ongoing human–AI handoffs; the shared timeline controls all motion. */
 .f-loop .f-human-halo,.f-loop .f-ai-halo{fill:none;stroke-width:1.2}.f-loop .f-human-node{fill:#f0a53c;stroke:#f0a53c}.f-loop-pulse,.f-loop-tail{stroke:none;filter:drop-shadow(0 0 4px #4ee6ef88)}.f-loop #f-loop-path{stroke-opacity:.55}
+
+/* Collaboration gives rise to the abstraction layer. */
+.f-birth{pointer-events:none}.f-orb{fill:#eaffff;filter:drop-shadow(0 0 5px #4ee6ef)}.f-orb-glow{fill:#4ee6ef;fill-opacity:.3;filter:blur(5px)}.f-orb-trail{fill:none;stroke:#4ee6ef;stroke-width:2;filter:drop-shadow(0 0 4px #4ee6ef)}.f-birth-ring{fill:none;stroke:#4ee6ef;stroke-width:1}
