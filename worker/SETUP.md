@@ -30,7 +30,7 @@ Under the Worker's **Settings → Variables and Secrets**, add these text values
 | Name | Value |
 |---|---|
 | `ALLOWED_ORIGINS` | `https://thomas-harwood.com` |
-| `GEMINI_MODEL` | `gemini-2.5-flash-lite` |
+| `GEMINI_MODEL` | `gemini-3.1-flash-lite` |
 | `DAILY_LIMIT` | `50` |
 | `PER_IP_HOURLY_LIMIT` | `3` |
 | `LIVE_ENABLED` | `true` |
@@ -104,7 +104,7 @@ Worker tests use real in-memory SQLite with the same schema/reservation SQL and 
 
 - [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
 - [D1 prepared statements](https://developers.cloudflare.com/d1/worker-api/prepared-statements/)
-- [Gemini 2.5 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-2.5-flash-lite)
+- [Gemini 3.1 Flash-Lite](https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite)
 - [Gemini generateContent API](https://ai.google.dev/api/generate-content)
 
 The selected stable model supports structured output. Its identifier is configurable if your Google account uses a different compatible model; verify support and pricing before switching.

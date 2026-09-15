@@ -84,7 +84,7 @@ export function createWorker({fetchImpl = fetch, now = Date.now} = {}) {
       const data = await readJSON(request);
       if (!data || typeof data.workflow !== 'string' || data.workflow.trim().length < 20 || data.workflow.length > 1200) throw new Failure(400, 'Describe your workflow in 20–1,200 characters.');
       // Never accept model, prompt, output budget, or API URL from the caller.
-      const model = env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+      const model = env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
       if (!/^gemini-[a-z0-9.-]+$/.test(model)) throw new Failure(503, 'The foundry needs a configuration update.');
       await quota(env, request, now(), ctx);
       const controller = new AbortController();
