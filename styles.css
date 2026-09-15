@@ -19,3 +19,6 @@ footer{max-width:1440px;margin:auto;padding:clamp(5rem,9vw,8rem) clamp(1.25rem,4
 
 /* Collaboration gives rise to the abstraction layer. */
 .f-birth{pointer-events:none}.f-orb{fill:#eaffff;filter:drop-shadow(0 0 5px #4ee6ef)}.f-orb-glow{fill:#4ee6ef;fill-opacity:.3;filter:blur(5px)}.f-orb-trail{fill:none;stroke:#4ee6ef;stroke-width:2;filter:drop-shadow(0 0 4px #4ee6ef)}.f-birth-ring{fill:none;stroke:#4ee6ef;stroke-width:1}
+
+/* Six experiments in three balanced pairs; mobile keeps the existing stacked layout. */
+.experiment-grid .experiment-card{grid-column:span 6}.feature-6 .experiment-copy h3{font-size:2.25rem}@media(max-width:680px){.feature-6 .experiment-copy h3{font-size:2.4rem}}
