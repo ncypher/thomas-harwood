@@ -22,3 +22,29 @@ footer{max-width:1440px;margin:auto;padding:clamp(5rem,9vw,8rem) clamp(1.25rem,4
 
 /* Six experiments in three balanced pairs; mobile keeps the existing stacked layout. */
 .experiment-grid .experiment-card{grid-column:span 6}.feature-6 .experiment-copy h3{font-size:2.25rem}@media(max-width:680px){.feature-6 .experiment-copy h3{font-size:2.4rem}}
+
+/* Surface polish: a larger unframed foundry and readable secondary text. */
+:root{--muted:#adc2c6;--dim:#91a9ae;--hover-green:#89efb9}
+.site-header nav,.header-link{color:#c0d2d5}
+.site-header nav a,.header-link,.text-button,.footer-links a{transition:color .18s ease,border-color .18s ease}
+.site-header nav a:hover,.site-header nav a:focus-visible,.header-link:hover,.header-link:focus-visible,.text-button:hover,.text-button:focus-visible,.footer-links a:hover,.footer-links a:focus-visible{color:var(--hover-green);border-color:var(--hover-green)}
+.site-header a:focus-visible,.footer-links a:focus-visible{outline:1px solid var(--hover-green);outline-offset:6px}
+.playground:before{color:#c59a5e}
+.project-top,.experiment-index,.experiment-foot,.copyright,.field-portrait figcaption{color:var(--dim)}
+.hero{max-width:1560px;grid-template-columns:minmax(0,1fr) minmax(0,1.18fr);gap:clamp(2rem,3.5vw,3.5rem)}
+.hero .foundry-window{min-height:0;border:0;background:none;box-shadow:none;clip-path:none;overflow:visible;contain:none;isolation:auto}
+.hero .window-bar{display:none}
+.hero .foundry-canvas{background:none;overflow:visible}
+.hero .foundry-canvas:before{display:none}
+.hero .foundry-readout{border-top:0;padding:0 1.4rem;margin-top:.6rem;color:var(--muted);font-size:10px}
+.hero .foundry-toggle{font-size:10px;color:var(--muted)}
+.hero .f-label,.hero .f-small{fill:var(--muted)}
+/* One gentle surface ripple per page load, with no pointer interaction. */
+main:after{content:"";position:fixed;inset:-20%;z-index:20;pointer-events:none;
+background:radial-gradient(ellipse at 72% 28%,transparent 29.6%,rgba(78,230,239,.055) 30%,transparent 30.6%,transparent 35.6%,rgba(137,239,185,.025) 36%,transparent 36.7%);
+transform-origin:72% 28%;opacity:0;animation:surface-ripple 14s ease-out 1 both}
+@keyframes surface-ripple{0%{transform:scale(.18);opacity:0}15%{opacity:.75}70%{opacity:.4}100%{transform:scale(3.2);opacity:0}}
+main:has(.foundry-toggle[aria-pressed="true"]):after{animation-play-state:paused}
+@media(max-width:1000px){.hero{grid-template-columns:1fr}.hero .foundry-window{width:100%;max-width:850px;justify-self:center}}
+@media(max-width:680px){.hero .foundry-readout{padding:0 .4rem;font-size:9px}.hero .foundry-toggle{font-size:9px}.hero{gap:3rem}}
+@media(prefers-reduced-motion:reduce){main:after{display:none;animation:none}.site-header nav a,.header-link,.text-button,.footer-links a{transition:none}}
