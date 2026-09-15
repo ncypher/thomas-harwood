@@ -97,14 +97,28 @@ export function createWorker({fetchImpl = fetch, now = Date.now} = {}) {
           body: JSON.stringify({systemInstruction: {parts: [{text: PROMPT}]}, contents: [{role: 'user', parts: [{text: JSON.stringify({workflow: data.workflow.trim()})}]}],
             generationConfig: {temperature: 0.65, candidateCount: 1, maxOutputTokens: 1000, responseMimeType: 'application/json', responseSchema: schema}})
         });
-        if (!upstream.ok) throw new Error('Provider unavailable');
+        if (!upstream.ok) {
+          // Only fixed messages and the HTTP status leave the backend, never raw provider errors.
+          const messages = {
+            400: 'Gemini rejected the request (400). Check the API key and model configuration.',
+            401: 'Gemini authentication failed (401). Check the API key.',
+            403: 'Gemini denied access (403). Check key restrictions and API access.',
+            404: 'Gemini could not find the configured model (404). Check GEMINI_MODEL.',
+            429: 'Gemini reported a quota or rate limit (429). Check the Google project quota and billing.'
+          };
+          throw new Failure(502, messages[upstream.status] || 'Gemini is temporarily unavailable. Try later.');
+        }
         const payload = await upstream.json();
         const candidate = payload.candidates?.[0];
-        if (candidate?.finishReason !== 'STOP') throw new Error('Incomplete response');
+        if (candidate?.finishReason === 'MAX_TOKENS') throw new Failure(502, 'Gemini reached the output limit before completing the concept.');
+        if (candidate?.finishReason !== 'STOP') throw new Failure(502, 'Gemini did not return a complete concept. Try a different nonconfidential workflow.');
         const text = candidate.content?.parts?.filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('');
-        result = validateConcept(JSON.parse(text));
-      } catch {
-        throw new Failure(502, 'The AI couldn’t complete that concept. Please try later, or explore the sample.');
+        try { result = validateConcept(JSON.parse(text)); }
+        catch { throw new Failure(502, 'Gemini returned a concept in an unexpected format.'); }
+      } catch (error) {
+        if (error instanceof Failure) throw error;
+        if (controller.signal.aborted) throw new Failure(502, 'Gemini took longer than 20 seconds to respond. Try later.');
+        throw new Failure(502, 'The connection to Gemini failed. Try later.');
       } finally { clearTimeout(timer); }
       return reply({source: 'ai', concept: result});
     } catch (error) {
