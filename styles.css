@@ -48,3 +48,6 @@ main:has(.foundry-toggle[aria-pressed="true"]):after{animation-play-state:paused
 @media(max-width:1000px){.hero{grid-template-columns:1fr}.hero .foundry-window{width:100%;max-width:850px;justify-self:center}}
 @media(max-width:680px){.hero .foundry-readout{padding:0 .4rem;font-size:9px}.hero .foundry-toggle{font-size:9px}.hero{gap:3rem}}
 @media(prefers-reduced-motion:reduce){main:after{display:none;animation:none}.site-header nav a,.header-link,.text-button,.footer-links a{transition:none}}
+
+/* River confluence hero */
+.hero{padding-bottom:clamp(11rem,18vw,15rem);touch-action:pan-y}.hero-copy{position:relative;z-index:1}.hero-river{position:absolute;top:0;bottom:0;left:50%;width:100vw;height:100%;transform:translateX(-50%);z-index:0;pointer-events:none;display:block}
