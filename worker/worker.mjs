@@ -68,7 +68,64 @@ async function quota(env, request, now, ctx) {
   // Counters expire; cleanup failure never releases a reserved model call.
   ctx.waitUntil(env.DB.prepare('DELETE FROM usage_counters WHERE expires_at < ?1').bind(second).run().catch(() => {}));
 }
-export function createWorker({fetchImpl = fetch, now = Date.now} = {}) {
+/* ---------- Leads: save a work order and email Tom ---------- */
+const LEAD_FIELDS = {site: 40, name: 120, contact: 200, org: 120, start: 60, team: 60, tools: 200, brief: 3000};
+const oneLine = v => String(v).replace(/[\r\n]+/g, ' ').trim();
+export function validateLead(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Failure(400, 'Please send the work order as JSON.');
+  if (typeof data.website === 'string' && data.website.trim()) throw new Failure(400, 'Please leave the website field empty.');
+  const out = {};
+  for (const [k, max] of Object.entries(LEAD_FIELDS)) {
+    const v = data[k] == null ? '' : data[k];
+    if (typeof v !== 'string' || v.length > max) throw new Failure(400, `The ${k} field is too long.`);
+    out[k] = k === 'brief' ? v.trim() : oneLine(v);
+  }
+  if (out.contact.length < 5) throw new Failure(400, 'Add an email address or phone number so Tom can reply.');
+  if (out.brief.length < 20) throw new Failure(400, 'Describe your what-if in at least 20 characters.');
+  return out;
+}
+export function buildLeadEmail(lead, {from, to, now}) {
+  const date = new Date(now).toUTCString();
+  const id = `<${now}.${Math.random().toString(36).slice(2)}@${from.split('@')[1]}>`;
+  const replyTo = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(lead.contact) ? lead.contact : '';
+  const subject = oneLine(`New what-if: ${lead.start || 'project'}${lead.org ? ' for ' + lead.org : ''}`).slice(0, 150);
+  const body = [
+    `New lead from ${lead.site || 'the website'}`, '',
+    `Name:    ${lead.name || '(not given)'}`, `Contact: ${lead.contact}`, `Business: ${lead.org || '(not given)'}`,
+    `Start:   ${lead.start || '(not given)'}`, `Team:    ${lead.team || '(not given)'}`, `Tools:   ${lead.tools || '(not given)'}`,
+    '', lead.brief, ''
+  ].join('\r\n');
+  const headers = [`From: cuREOsity labs website <${from}>`, `To: <${to}>`, ...(replyTo ? [`Reply-To: <${replyTo}>`] : []),
+    `Subject: ${subject}`, `Date: ${date}`, `Message-ID: ${id}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit'];
+  return headers.join('\r\n') + '\r\n\r\n' + body;
+}
+async function leadQuota(env, request, now) {
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (!ip) throw new Failure(503, 'Sending is temporarily unavailable. Please email instead.');
+  const hour = Math.floor(now / 3600000), day = Math.floor(now / 86400000);
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(env.LEAD_SALT || env.GEMINI_API_KEY || 'cureosity-leads'), {name: 'HMAC', hash: 'SHA-256'}, false, ['sign']);
+  const digest = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`lead:${hour}:${ip}`));
+  const tag = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  if (!await reserve(env.DB, `lh:${hour}:${tag}`, (hour + 2) * 3600, 5)) throw new Failure(429, 'Too many sends from this connection. Please email instead, or try again in an hour.');
+  if (!await reserve(env.DB, `ld:${day}`, (day + 2) * 86400, 100)) throw new Failure(429, 'The workshop inbox is full for today. Please email instead.');
+}
+async function defaultSendEmail(env, from, to, raw) {
+  const {EmailMessage} = await import('cloudflare:email');
+  await env.LEAD_EMAIL.send(new EmailMessage(from, to, raw));
+}
+async function handleLead(request, env, now, sendEmail) {
+  if (env.LEADS_ENABLED !== 'true' || !env.DB || !env.LEAD_FROM || !env.LEAD_TO) throw new Failure(503, 'Sending is not switched on yet. Please email instead.');
+  const lead = validateLead(await readJSON(request));
+  await leadQuota(env, request, now);
+  await env.DB.prepare('INSERT INTO leads (created_at, site, name, contact, org, start, team, tools, brief) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)')
+    .bind(Math.floor(now / 1000), lead.site, lead.name, lead.contact, lead.org, lead.start, lead.team, lead.tools, lead.brief).run();
+  let emailed = false;
+  try { if (env.LEAD_EMAIL) { await sendEmail(env, env.LEAD_FROM, env.LEAD_TO, buildLeadEmail(lead, {from: env.LEAD_FROM, to: env.LEAD_TO, now})); emailed = true; } }
+  catch { /* The lead is saved; the notification is best-effort. */ }
+  return {ok: true, emailed};
+}
+
+export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = defaultSendEmail} = {}) {
   return {async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin');
     const allowed = (env.ALLOWED_ORIGINS || 'https://thomas-harwood.com').split(',').map(s => s.trim());
@@ -76,9 +133,17 @@ export function createWorker({fetchImpl = fetch, now = Date.now} = {}) {
     const reply = (body, status = 200, extra = {}) => new Response(JSON.stringify(body), {status, headers: {...headers, ...extra}});
     if (!origin || !allowed.includes(origin)) return reply({error: 'This origin is not allowed.'}, 403);
     headers['Access-Control-Allow-Origin'] = origin;
-    if (new URL(request.url).pathname !== '/api/foundry') return reply({error: 'Not found.'}, 404);
+    const path = new URL(request.url).pathname;
+    if (path !== '/api/foundry' && path !== '/api/lead') return reply({error: 'Not found.'}, 404);
     if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: {...headers, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600'}});
     if (request.method !== 'POST') return reply({error: 'Use POST.'}, 405, {Allow: 'POST, OPTIONS'});
+    if (path === '/api/lead') {
+      try { return reply(await handleLead(request, env, now(), sendEmail)); }
+      catch (error) {
+        if (error instanceof Failure) return reply({error: error.message}, error.status, error.retry ? {'Retry-After': String(error.retry)} : {});
+        return reply({error: 'Sending is temporarily unavailable. Please email instead.'}, 503);
+      }
+    }
     try {
       if (env.LIVE_ENABLED !== 'true' || !env.GEMINI_API_KEY || !env.DB) throw new Failure(503, 'Live concepts are not available yet. Try the sample concept.');
       const data = await readJSON(request);

@@ -108,3 +108,24 @@ Worker tests use real in-memory SQLite with the same schema/reservation SQL and 
 - [Gemini generateContent API](https://ai.google.dev/api/generate-content)
 
 The selected stable model supports structured output. Its identifier is configurable if your Google account uses a different compatible model; verify support and pricing before switching.
+
+## Lead notifications (`/api/lead`)
+
+The same Worker accepts work orders from the CuREOsity Labs workbench (and later this site), saves each one to D1, and emails Tom.
+
+1. **Email Routing** must be enabled on cureositylabs.com, with your Gmail verified as a destination address (done 2026-10-14).
+2. **D1:** in the `harwood-foundry-usage` console, run the new `CREATE TABLE IF NOT EXISTS leads …` statement from `worker/schema.sql`.
+3. **Worker code:** replace the Worker's code with the updated `worker/worker.mjs` and deploy.
+4. **Send-email binding:** Worker → Settings → Bindings → Add → *Send email*. Name it `LEAD_EMAIL` and restrict it to your verified Gmail address.
+5. **Variables** (Settings → Variables and Secrets):
+
+| Name | Value |
+|---|---|
+| `ALLOWED_ORIGINS` | `https://thomas-harwood.com,https://cureositylabs.com` |
+| `LEADS_ENABLED` | `true` |
+| `LEAD_FROM` | `leads@cureositylabs.com` (any address on the Email Routing domain) |
+| `LEAD_TO` | your verified Gmail address |
+
+Keep your Gmail address in the dashboard, not in this public repository.
+
+Behavior: 20–3,000 character brief, a contact (email or phone) required, a hidden honeypot field, 5 sends per connection per hour, 100 per day. The lead is saved even if the email notification fails. Read saved leads in the D1 console with `SELECT * FROM leads ORDER BY id DESC;`.

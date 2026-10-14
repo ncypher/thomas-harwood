@@ -45,3 +45,21 @@ test('output truncation and schema errors have distinct safe diagnostics',async(
  const malformed=setup({response:()=>Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:'not json'}]}}]})});
  assert.match((await (await malformed.call(malformed.request())).json()).error,/unexpected format/);
 });
+
+/* ---------- Leads ---------- */
+function leadSetup(opts={}){
+ const sql=new DatabaseSync(':memory:'); sql.exec(readFileSync(new URL('../worker/schema.sql',import.meta.url),'utf8'));
+ const db={prepare(q){return {bind(...a){const st=sql.prepare(q);return {async first(){return st.get(...a)||null},async run(){return st.run(...a)}}}}}};
+ const env={LEADS_ENABLED:'true',DB:db,LEAD_FROM:'leads@cureositylabs.com',LEAD_TO:'owner@example.com',LEAD_EMAIL:{},ALLOWED_ORIGINS:'https://thomas-harwood.com,https://cureositylabs.com',...(opts.env||{})};
+ const mails=[];
+ const worker=createWorker({now:()=>1800000000000,fetchImpl:async()=>{throw new Error('model must not be called')},sendEmail:async(e,from,to,raw)=>{if(opts.mailFails)throw new Error('down');mails.push({from,to,raw})}});
+ const ctx={waitUntil(p){p.catch(()=>{})}};
+ const lead={site:'cureositylabs.com',name:'Pat',contact:'pat@example.com',org:'Pat\'s Shop',start:'Automate a task',team:'2 to 10 people',tools:'Spreadsheets',brief:'We retype every work order into three places every day.'};
+ const req=(body=lead,{origin='https://cureositylabs.com',ip='10.1.1.1'}={})=>new Request('https://x.workers.dev/api/lead',{method:'POST',headers:{Origin:origin,'CF-Connecting-IP':ip,'Content-Type':'application/json'},body:typeof body==='string'?body:JSON.stringify(body)});
+ return {sql,mails,lead,req,call:r=>worker.fetch(r,env,ctx)};
+}
+test('lead is saved and emailed to the owner, with reply-to set to the visitor',async()=>{const s=leadSetup();const r=await s.call(s.req());assert.equal(r.status,200);assert.deepEqual(await r.json(),{ok:true,emailed:true});assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,1);assert.equal(s.mails.length,1);assert.equal(s.mails[0].to,'owner@example.com');assert.match(s.mails[0].raw,/Reply-To: <pat@example.com>/);assert.match(s.mails[0].raw,/retype every work order/)});
+test('lead headers cannot be injected through form fields',async()=>{const s=leadSetup();await s.call(s.req({...s.lead,org:'X\r\nBcc: victim@example.com',contact:'a@b.co\r\nBcc: v@x.com'}));const head=s.mails[0].raw.split('\r\n\r\n')[0];assert(!/^Bcc:/m.test(head));assert(!head.includes('Reply-To'))});
+test('lead validation, honeypot, origin and switch',async()=>{const s=leadSetup();for(const body of [{...s.lead,contact:''},{...s.lead,brief:'short'},{...s.lead,website:'spam.example'},{...s.lead,brief:'x'.repeat(3001)}])assert.equal((await s.call(s.req(body))).status,400);assert.equal((await s.call(s.req(s.lead,{origin:'https://evil.example'}))).status,403);const off=leadSetup({env:{LEADS_ENABLED:'false'}});assert.equal((await off.call(off.req())).status,503);assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,0)});
+test('five leads per connection per hour',async()=>{const s=leadSetup();for(let i=0;i<5;i++)assert.equal((await s.call(s.req())).status,200);assert.equal((await s.call(s.req())).status,429);assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,5)});
+test('lead is still saved when the email notification fails',async()=>{const s=leadSetup({mailFails:true});const r=await s.call(s.req());assert.equal(r.status,200);assert.deepEqual(await r.json(),{ok:true,emailed:false});assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,1)});
