@@ -129,3 +129,18 @@ The same Worker accepts work orders from the CuREOsity Labs workbench (and later
 Keep your Gmail address in the dashboard, not in this public repository.
 
 Behavior: 20–3,000 character brief, a contact (email or phone) required, a hidden honeypot field, 5 sends per connection per hour, 100 per day. The lead is saved even if the email notification fails. Read saved leads in the D1 console with `SELECT * FROM leads ORDER BY id DESC;`.
+
+## Lead inbox (`/api/leads`, owner only)
+
+`https://cureositylabs.com/inbox.html` lists every lead and lets Tom set a status (new, contacted, talked, pilot, closed) and a private note.
+
+1. **D1 console:** add the two new columns (once):
+   ```sql
+   ALTER TABLE leads ADD COLUMN status TEXT NOT NULL DEFAULT 'new';
+   ALTER TABLE leads ADD COLUMN note TEXT;
+   ```
+2. **Worker code:** paste the updated `worker/worker.mjs` and deploy.
+3. **Secret:** Settings → Variables and Secrets → add **`ADMIN_TOKEN`** as a *Secret*: a random string of at least 32 characters (a password manager's generator works). Deploy.
+4. Open the inbox page, paste the same key once. It is remembered only in that browser.
+
+The key never appears in the repository or the page. Without it, the inbox routes answer 401. Anyone holding the key can read leads, so keep it in your password manager and rotate it (change the secret) if it leaks.

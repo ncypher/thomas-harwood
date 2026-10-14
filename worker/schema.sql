@@ -8,5 +8,7 @@ CREATE TABLE IF NOT EXISTS leads (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at INTEGER NOT NULL,
   site TEXT, name TEXT, contact TEXT NOT NULL, org TEXT, start TEXT, team TEXT, tools TEXT,
-  brief TEXT NOT NULL
+  brief TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'new',
+  note TEXT
 );

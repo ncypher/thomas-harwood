@@ -125,6 +125,43 @@ async function handleLead(request, env, now, sendEmail) {
   return {ok: true, emailed};
 }
 
+/* ---------- Lead inbox (owner only, bearer key) ---------- */
+const STATUSES = ['new', 'contacted', 'talked', 'pilot', 'closed'];
+async function sameSecret(a, b) {
+  // Hash both sides so the comparison time does not depend on where they differ.
+  const enc = new TextEncoder();
+  const [x, y] = await Promise.all([crypto.subtle.digest('SHA-256', enc.encode(a)), crypto.subtle.digest('SHA-256', enc.encode(b))]);
+  const u = new Uint8Array(x), v = new Uint8Array(y); let diff = 0;
+  for (let i = 0; i < u.length; i++) diff |= u[i] ^ v[i];
+  return diff === 0;
+}
+async function requireOwner(request, env) {
+  const token = env.ADMIN_TOKEN || '';
+  if (token.length < 32) throw new Failure(503, 'The inbox is not set up yet. Add an ADMIN_TOKEN secret of at least 32 characters.');
+  const auth = request.headers.get('Authorization') || '';
+  const given = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!given || !await sameSecret(given, token)) throw new Failure(401, 'That inbox key is not right.');
+}
+async function handleInbox(request, env, path) {
+  if (!env.DB) throw new Failure(503, 'The inbox database is not connected.');
+  await requireOwner(request, env);
+  if (path === '/api/leads' && request.method === 'GET') {
+    const {results} = await env.DB.prepare('SELECT id, created_at, site, name, contact, org, start, team, tools, brief, status, note FROM leads ORDER BY id DESC LIMIT 500').bind().all();
+    return {leads: results || []};
+  }
+  if (path === '/api/leads/update' && request.method === 'POST') {
+    const data = await readJSON(request);
+    const id = Number(data && data.id);
+    if (!Number.isInteger(id) || id < 1) throw new Failure(400, 'Pick a lead to update.');
+    if (!STATUSES.includes(data.status)) throw new Failure(400, 'Pick a status: ' + STATUSES.join(', ') + '.');
+    const note = typeof data.note === 'string' ? data.note.slice(0, 2000) : '';
+    const r = await env.DB.prepare('UPDATE leads SET status = ?1, note = ?2 WHERE id = ?3').bind(data.status, note, id).run();
+    if (!r || (r.meta ? r.meta.changes : r.changes) === 0) throw new Failure(404, 'That lead no longer exists.');
+    return {ok: true};
+  }
+  throw new Failure(405, 'That action is not supported.');
+}
+
 export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = defaultSendEmail} = {}) {
   return {async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin');
@@ -134,8 +171,16 @@ export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = def
     if (!origin || !allowed.includes(origin)) return reply({error: 'This origin is not allowed.'}, 403);
     headers['Access-Control-Allow-Origin'] = origin;
     const path = new URL(request.url).pathname;
-    if (path !== '/api/foundry' && path !== '/api/lead') return reply({error: 'Not found.'}, 404);
-    if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: {...headers, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Max-Age': '600'}});
+    const inbox = path === '/api/leads' || path === '/api/leads/update';
+    if (path !== '/api/foundry' && path !== '/api/lead' && !inbox) return reply({error: 'Not found.'}, 404);
+    if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: {...headers, 'Access-Control-Allow-Methods': inbox ? 'GET, POST, OPTIONS' : 'POST, OPTIONS', 'Access-Control-Allow-Headers': inbox ? 'Content-Type, Authorization' : 'Content-Type', 'Access-Control-Max-Age': '600'}});
+    if (inbox) {
+      try { return reply(await handleInbox(request, env, path)); }
+      catch (error) {
+        if (error instanceof Failure) return reply({error: error.message}, error.status);
+        return reply({error: 'The inbox is temporarily unavailable.'}, 503);
+      }
+    }
     if (request.method !== 'POST') return reply({error: 'Use POST.'}, 405, {Allow: 'POST, OPTIONS'});
     if (path === '/api/lead') {
       try { return reply(await handleLead(request, env, now(), sendEmail)); }

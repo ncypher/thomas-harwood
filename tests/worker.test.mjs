@@ -63,3 +63,19 @@ test('lead headers cannot be injected through form fields',async()=>{const s=lea
 test('lead validation, honeypot, origin and switch',async()=>{const s=leadSetup();for(const body of [{...s.lead,contact:''},{...s.lead,brief:'short'},{...s.lead,website:'spam.example'},{...s.lead,brief:'x'.repeat(3001)}])assert.equal((await s.call(s.req(body))).status,400);assert.equal((await s.call(s.req(s.lead,{origin:'https://evil.example'}))).status,403);const off=leadSetup({env:{LEADS_ENABLED:'false'}});assert.equal((await off.call(off.req())).status,503);assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,0)});
 test('five leads per connection per hour',async()=>{const s=leadSetup();for(let i=0;i<5;i++)assert.equal((await s.call(s.req())).status,200);assert.equal((await s.call(s.req())).status,429);assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,5)});
 test('lead is still saved when the email notification fails',async()=>{const s=leadSetup({mailFails:true});const r=await s.call(s.req());assert.equal(r.status,200);assert.deepEqual(await r.json(),{ok:true,emailed:false});assert.equal(s.sql.prepare('SELECT count(*) n FROM leads').get().n,1)});
+
+/* ---------- Lead inbox ---------- */
+function inboxSetup(env={}){
+ const sql=new DatabaseSync(':memory:'); sql.exec(readFileSync(new URL('../worker/schema.sql',import.meta.url),'utf8'));
+ const db={prepare(q){return {bind(...a){const st=sql.prepare(q);return {async first(){return st.get(...a)||null},async run(){return st.run(...a)},async all(){return {results:st.all(...a)}}}}}}};
+ sql.prepare("INSERT INTO leads (created_at, contact, brief) VALUES (1, 'a@b.co', 'A brief long enough to count.')").run();
+ const KEY='k'.repeat(40);
+ const e={DB:db,ADMIN_TOKEN:KEY,ALLOWED_ORIGINS:'https://cureositylabs.com',...env};
+ const worker=createWorker({fetchImpl:async()=>{throw new Error('no model')}});
+ const req=(path,{method='GET',key=KEY,body}={})=>new Request('https://x.workers.dev'+path,{method,headers:{Origin:'https://cureositylabs.com','Content-Type':'application/json',...(key?{Authorization:'Bearer '+key}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ return {sql,req,call:r=>worker.fetch(r,e,{waitUntil(){}})};
+}
+test('inbox lists leads only with the right key',async()=>{const s=inboxSetup();const ok=await s.call(s.req('/api/leads'));assert.equal(ok.status,200);const d=await ok.json();assert.equal(d.leads.length,1);assert.equal(d.leads[0].status,'new');for(const key of ['', 'wrong'.repeat(10)])assert.equal((await s.call(s.req('/api/leads',{key}))).status,401)});
+test('inbox refuses to run with a short or missing key',async()=>{for(const ADMIN_TOKEN of [undefined,'short']){const s=inboxSetup({ADMIN_TOKEN});assert.equal((await s.call(s.req('/api/leads',{key:'short'}))).status,503)}});
+test('inbox updates status and note, validating input',async()=>{const s=inboxSetup();assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',body:{id:1,status:'talked',note:'Coffee Tuesday'}}))).status,200);const row=s.sql.prepare('SELECT status,note FROM leads WHERE id=1').get();assert.equal(row.status,'talked');assert.equal(row.note,'Coffee Tuesday');assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',body:{id:1,status:'hacked'}}))).status,400);assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',body:{id:99,status:'new'}}))).status,404);assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',key:'',body:{id:1,status:'closed'}}))).status,401)});
+test('inbox preflight allows the Authorization header',async()=>{const s=inboxSetup();const r=await s.call(s.req('/api/leads',{method:'OPTIONS',key:''}));assert.equal(r.status,204);assert.match(r.headers.get('Access-Control-Allow-Headers'),/Authorization/)});
