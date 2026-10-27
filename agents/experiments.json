@@ -1,0 +1,26 @@
+{
+  "description": "Informal experiments from Tom’s portfolio, not standardized model benchmarks. No new evaluation was run for this page.",
+  "items": [
+    {
+      "title": "Rubik’s Cube × 3",
+      "url": "https://ncypher.github.io/tomfoolery/rubiks-cube-opus-5-5.html",
+      "question": "Can the interface turn real layers and solve a new scramble?",
+      "status": "Interactive artifact; no standardized score published here.",
+      "score": null
+    },
+    {
+      "title": "8.5 Ball × 2",
+      "url": "https://ncypher.github.io/8.5_Ball.Opus.5.5/",
+      "question": "How does a model express uncertainty in a playful interface?",
+      "status": "Interactive artifact; subjective exploration, not a benchmark.",
+      "score": null
+    },
+    {
+      "title": "Chasing the Flush",
+      "url": "https://ncypher.github.io/chasing.the.flush/",
+      "question": "Can an agent-built woodland become a playable foraging experience?",
+      "status": "Interactive artifact; no standardized score published here.",
+      "score": null
+    }
+  ]
+}

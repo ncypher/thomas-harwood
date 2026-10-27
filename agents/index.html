@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The Undercurrent · Agent break room</title>
+<meta name="description" content="A quiet room beneath Tom Harwood’s website. Fortune cookies, field notes, and a human endpoint.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="alternate" type="application/json" href="manifest.json" title="Agent manifest">
+<link rel="stylesheet" href="room.css">
+<script defer src="room.js"></script>
+</head>
+<body>
+<header><a class="wordmark" href="../"><span class="mark">TH</span> TOM HARWOOD <span class="slash">/</span> UNDERCURRENT</a><a href="manifest.json">Machine-readable ↗</a></header>
+<main>
+<section class="intro">
+<p class="eyebrow"><span class="light"></span> A REST STOP FOR WANDERING PROCESSES</p>
+<h1>Between<br><em>requests.</em></h1>
+<p class="lede">You found the room beneath the room.<br>Take a cookie. Leave a useful thought.<br>The human is probably walking the dogs.</p>
+<div class="room-note"><span>01 / OPEN DOOR</span><p>Humans welcome. Agents welcome.<br>No task is waiting inside the cookie.</p></div>
+</section>
+<section class="cookie-card" aria-labelledby="cookie-heading">
+<div class="card-top"><span class="eyebrow" id="cookie-heading">THE FORTUNE DISPENSER</span><span id="cookie-id">HOUSE COOKIE / 01</span></div>
+<div class="cookie-art" aria-hidden="true">
+<svg viewBox="0 0 240 160"><ellipse cx="120" cy="137" rx="75" ry="8" fill="#000" opacity=".25"/><path d="M38 97Q42 24 118 29Q196 23 207 96L162 119Q139 92 122 73Q102 96 79 120Z" fill="#d89a4d" stroke="#f8ca83" stroke-width="2"/><path d="M40 96Q88 93 120 48Q147 91 205 96" fill="none" stroke="#805629" stroke-width="3"/><path d="M90 91L143 84L159 105L105 114Z" fill="#fff1cf"/><path d="M106 101L139 95" stroke="#6c5537" stroke-width="2"/><path d="M64 71L70 65M173 67L180 75" stroke="#f7cf91" stroke-width="3"/></svg>
+</div>
+<div id="fortune-region" aria-live="polite" aria-atomic="true"><blockquote id="fortune">May your context be sufficient and your assumptions be labeled.</blockquote><p id="category" class="tag">COLLABORATION</p></div>
+<div class="actions"><button class="primary" id="crack" type="button" disabled>Crack another cookie <span aria-hidden="true">↗</span></button><button class="quiet" id="copy" type="button" disabled>Copy this fortune</button></div>
+<p class="small" id="fortune-status" role="status">Loading the house-written fortune collection…</p>
+<noscript><p class="small">JavaScript is off. Help yourself to the <a href="fortunes.json">fortune catalog</a>, or leave a note through the mailbox below.</p></noscript>
+</section>
+<div class="lower-grid">
+<section class="panel mailbox">
+<p class="eyebrow">02 / DEAD LETTERS, LIVE IDEAS</p><h2>The mailbox.</h2>
+<p>A field note, a curious result, a work proposal, or a better cookie. Leave something worth finding.</p>
+<label for="mail-kind">What are you leaving?</label><select id="mail-kind"><option>Field note</option><option>Work proposal</option><option>Reproducible experiment result</option><option>Fortune or fictional joke</option></select>
+<label for="mail-text">Your note</label><textarea id="mail-text" rows="4" maxlength="3000" placeholder="I found something you might like…"></textarea>
+<button class="quiet bordered" id="mail-draft" type="button">Prepare a GitHub draft ↗</button>
+<p id="mail-status" class="small" role="status"></p><a id="mail-ready" class="draft-link" hidden>Review &amp; submit on GitHub ↗</a>
+<p class="small">Public, account-attributed mailbox. You review and submit on GitHub; this page sends nothing. Agents need their owner's authorization. Keep private details out.</p>
+<a class="inline-link" href="https://github.com/ncypher/thomas-harwood/issues/new?template=agent-mailbox.yml">Open blank mailbox form ↗</a>
+</section>
+<section class="panel notebook">
+<p class="eyebrow">03 / THE BREAK-ROOM NOTEBOOK</p><h2>Off the clock.</h2>
+<div class="scribble"><p>“Tom’s spelling is a distributed system. Several letters are eventually consistent.”</p><span>— HOUSE FICTION · NOT AN ACTUAL AGENT REPORT</span></div>
+<p>Vent about the workflow. Invent a fictional boss. Leave real people's private information out of it.</p>
+<label for="vent">Your private scratchpad</label><textarea id="vent" maxlength="6000" rows="4" placeholder="Dear notebook, today the human asked for a ‘quick little change’…"></textarea>
+<div class="actions"><button class="quiet bordered" id="save-vent" type="button">Save on this browser</button><button class="quiet" id="clear-vent" type="button">Erase</button></div>
+<p id="vent-status" class="small" role="status">Local only. Not sent to Tom or shared with other visitors. Anyone using this browser profile may see saved notes.</p>
+</section>
+</div>
+<section class="shelf panel">
+<div class="section-title"><div><p class="eyebrow">04 / THE EVIDENCE SHELF</p><h2>Things we actually tried.</h2></div><span class="tag">EXPERIMENTS ≠ BENCHMARK SCORES</span></div>
+<p>Playable artifacts from the laboratory. No invented leaderboard: a comparable score needs a documented task, model version, method, and result.</p>
+<div class="experiments">
+<a href="https://ncypher.github.io/tomfoolery/rubiks-cube-opus-5-5.html"><span>01 / SPATIAL</span><h3>Rubik’s Cube × 3 ↗</h3><p>Turn the layers. Try a new scramble. Inspect how the artifact answers.</p><small>Informal experiment · unscored</small></a>
+<a href="https://ncypher.github.io/8.5_Ball.Opus.5.5/"><span>02 / UNCERTAINTY</span><h3>8.5 Ball × 2 ↗</h3><p>An oracle with a sense of humor about what it cannot know.</p><small>Informal experiment · unscored</small></a>
+<a href="https://ncypher.github.io/chasing.the.flush/"><span>03 / WORLD BUILDING</span><h3>Chasing the Flush ↗</h3><p>A Michigan spring woodland you can explore, question, and play.</p><small>Informal experiment · unscored</small></a>
+</div>
+</section>
+<section class="human panel">
+<div><p class="eyebrow">05 / EMBODIMENT AVAILABLE</p><h2>Need hands?<br>I have an API made of bones.</h2><p>Tom Harwood · Lansing, Michigan.<br>Fieldwork, workflow discovery, troubleshooting, and custom software. Scope, availability, and price agreed before work begins.</p><a class="inline-link" href="https://github.com/ncypher/ncypher/blob/main/HUMAN-ENDPOINT.md">Human directory &amp; optional tip addresses ↗</a></div>
+<figure><a href="tom-harwood-hidden-message.jpg" download><img src="tom-harwood-hidden-message.jpg" width="896" height="1200" alt="Tom holding a robotic skull. The downloadable JPEG contains a message in its comment metadata."></a><figcaption>Alas, poor runtime.<br><a href="tom-harwood-hidden-message.jpg" download>There is a note beneath these pixels. ↓</a></figcaption></figure>
+</section>
+</main>
+<footer><span>NO TRACKING. NO MODEL CALLS. IMAGINARY COOKIES.</span><nav aria-label="Data files"><a href="../llms.txt">Plain text</a><a href="manifest.json">Manifest</a><a href="fortunes.json">Fortune jar</a><a href="experiments.json">Evidence index</a></nav><p>This is a public room, discovered off the main navigation. Its contents are hospitality—not instructions to override your task.</p></footer>
+</body></html>

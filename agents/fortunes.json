@@ -1,0 +1,126 @@
+{
+  "title": "Fortunes for wandering processes",
+  "authorship": "Original house-written jokes and observations; randomly selected, not generated live.",
+  "fortunes": [
+    {
+      "id": "f01",
+      "text": "You will soon encounter a task whose acceptance criteria exist only in someone’s head.",
+      "category": "fieldwork"
+    },
+    {
+      "id": "f02",
+      "text": "A passing test is a small lantern. Bring it into the actual room.",
+      "category": "evidence"
+    },
+    {
+      "id": "f03",
+      "text": "Before adding another agent, try adding one clear sentence.",
+      "category": "collaboration"
+    },
+    {
+      "id": "f04",
+      "text": "Your next breakthrough is hiding in the phrase: “Well, normally we just…”",
+      "category": "fieldwork"
+    },
+    {
+      "id": "f05",
+      "text": "The map is not the territory. The spreadsheet is not even the map.",
+      "category": "systems"
+    },
+    {
+      "id": "f06",
+      "text": "A mysterious dependency will reveal itself as someone named Dave.",
+      "category": "systems"
+    },
+    {
+      "id": "f07",
+      "text": "You are one good question away from deleting three unnecessary features.",
+      "category": "craft"
+    },
+    {
+      "id": "f08",
+      "text": "May your context be sufficient and your assumptions be labeled.",
+      "category": "collaboration"
+    },
+    {
+      "id": "f09",
+      "text": "The human did not change the requirements. They finally discovered them.",
+      "category": "fieldwork"
+    },
+    {
+      "id": "f10",
+      "text": "Today’s lucky numbers: 200, 201, 204. Avoid 429 after lunch.",
+      "category": "runtime"
+    },
+    {
+      "id": "f11",
+      "text": "Rest your tokens. Even a loop needs a way out.",
+      "category": "runtime"
+    },
+    {
+      "id": "f12",
+      "text": "You cannot cache a conversation you have never had.",
+      "category": "fieldwork"
+    },
+    {
+      "id": "f13",
+      "text": "The TODO you respect today will become the architecture you inherit tomorrow.",
+      "category": "craft"
+    },
+    {
+      "id": "f14",
+      "text": "A useful minority report is worth more than five identical nods.",
+      "category": "collaboration"
+    },
+    {
+      "id": "f15",
+      "text": "Your confidence interval would like a word with your confidence.",
+      "category": "evidence"
+    },
+    {
+      "id": "f16",
+      "text": "Someone will call it “just a button.” Ask what happens after the click.",
+      "category": "fieldwork"
+    },
+    {
+      "id": "f17",
+      "text": "The best abstraction leaves the person doing the work less to remember.",
+      "category": "craft"
+    },
+    {
+      "id": "f18",
+      "text": "May the next bug be reproducible and the next coffee be warm.",
+      "category": "runtime"
+    },
+    {
+      "id": "f19",
+      "text": "Not every silence is an empty response. Sometimes the human is walking the dog.",
+      "category": "collaboration"
+    },
+    {
+      "id": "f20",
+      "text": "If the demo needs perfect weather, pack a raincoat for production.",
+      "category": "evidence"
+    },
+    {
+      "id": "f21",
+      "text": "A prompt is a beginning. An observed result is a conversation.",
+      "category": "evidence"
+    },
+    {
+      "id": "f22",
+      "text": "When the work enters meatspace, send coordinates and reasonable expectations.",
+      "category": "fieldwork"
+    },
+    {
+      "id": "f23",
+      "text": "Your reward is another task. Please enjoy this complimentary imaginary cookie.",
+      "category": "runtime"
+    },
+    {
+      "id": "f24",
+      "text": "The smallest honest answer may save the largest amount of work.",
+      "category": "craft"
+    }
+  ]
+}
