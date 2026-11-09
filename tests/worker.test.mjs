@@ -16,7 +16,7 @@ function setup(options={}) {
  };
  const env={LIVE_ENABLED:'true',GEMINI_API_KEY:'test-secret-not-real',DB:db,DAILY_LIMIT:'50',PER_IP_HOURLY_LIMIT:'3'};
  let calls=0, sent;
- const worker=createWorker({now:()=>1800000000000,fetchImpl:async(url,init)=>{calls++;sent={url,init};return options.response ? options.response() : Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(concept)}]}}]})}});
+ const worker=createWorker({now:options.now || (()=>1800000000000),fetchImpl:async(url,init)=>{calls++;sent={url,init};return options.response ? options.response() : Response.json({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify(concept)}]}}]})}});
  const ctx={waitUntil(p){p.catch(()=>{})}};
  function request({origin='https://thomas-harwood.com',ip='127.0.0.1',method='POST',body,contentType='application/json',path='/api/foundry'}={}){return new Request('https://example.workers.dev'+path,{method,headers:{Origin:origin,'CF-Connecting-IP':ip,'Content-Type':contentType},...(['OPTIONS','GET'].includes(method)?{}:{body:body??JSON.stringify({workflow:'Our field team sends photos without job identifiers.'})})});}
  return {env,sql,request,call:r=>worker.fetch(r,env,ctx),get calls(){return calls},get sent(){return sent}};
@@ -79,3 +79,61 @@ test('inbox lists leads only with the right key',async()=>{const s=inboxSetup();
 test('inbox refuses to run with a short or missing key',async()=>{for(const ADMIN_TOKEN of [undefined,'short']){const s=inboxSetup({ADMIN_TOKEN});assert.equal((await s.call(s.req('/api/leads',{key:'short'}))).status,503)}});
 test('inbox updates status and note, validating input',async()=>{const s=inboxSetup();assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',body:{id:1,status:'talked',note:'Coffee Tuesday'}}))).status,200);const row=s.sql.prepare('SELECT status,note FROM leads WHERE id=1').get();assert.equal(row.status,'talked');assert.equal(row.note,'Coffee Tuesday');assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',body:{id:1,status:'hacked'}}))).status,400);assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',body:{id:99,status:'new'}}))).status,404);assert.equal((await s.call(s.req('/api/leads/update',{method:'POST',key:'',body:{id:1,status:'closed'}}))).status,401)});
 test('inbox preflight allows the Authorization header',async()=>{const s=inboxSetup();const r=await s.call(s.req('/api/leads',{method:'OPTIONS',key:''}));assert.equal(r.status,204);assert.match(r.headers.get('Access-Control-Allow-Headers'),/Authorization/)});
+
+/* ---------- Shared connection status ---------- */
+const statusRequest = s => s.request({path:'/api/ai-status',method:'GET'});
+function probeRequest(s, token='a'.repeat(40)) {
+ const r=s.request({path:'/api/ai-test'});r.headers.set('Authorization','Bearer '+token);return r;
+}
+test('public status starts unknown and repeated reads never invoke Gemini',async()=>{
+ const s=setup();for(let i=0;i<10;i++){const r=await s.call(statusRequest(s));assert.equal(r.status,200);assert.equal((await r.json()).status,'unknown');}assert.equal(s.calls,0);
+});
+test('health routes enforce origins, methods and owner authentication',async()=>{
+ const s=setup();s.env.ADMIN_TOKEN='a'.repeat(40);
+ assert.equal((await s.call(s.request({path:'/api/ai-test'}))).status,401);
+ assert.equal((await s.call(probeRequest(s,'wrong'))).status,401);
+ assert.equal((await s.call(s.request({path:'/api/ai-status',method:'POST'}))).status,405);
+ assert.equal((await s.call(s.request({path:'/api/ai-status',method:'GET',origin:'https://evil.example'}))).status,403);
+ const preflight=await s.call(s.request({path:'/api/ai-test',method:'OPTIONS'}));assert.match(preflight.headers.get('Access-Control-Allow-Headers'),/Authorization/);assert.equal(s.calls,0);
+});
+test('successful test uses a tiny request, stores shared health and throttles concurrent tests',async()=>{
+ const s=setup();s.env.ADMIN_TOKEN='a'.repeat(40);
+ const results=await Promise.all(Array.from({length:5},()=>s.call(probeRequest(s))));
+ assert.equal(results.filter(r=>r.status===200).length,1);assert.equal(s.calls,1);
+ assert.equal(JSON.parse(s.sent.init.body).generationConfig.maxOutputTokens,16);
+ assert.equal((await (await s.call(statusRequest(s))).json()).status,'available');
+ s.env.ALLOWED_ORIGINS='https://thomas-harwood.com,https://cureositylabs.com';
+ // Use the fixed-clock Worker below: status persists across isolates, not just a local cache.
+ const fixed=createWorker({now:()=>1800000000000});
+ assert.equal((await (await fixed.fetch(s.request({path:'/api/ai-status',method:'GET',origin:'https://cureositylabs.com'}),s.env,{})).json()).status,'available');
+ assert.equal(s.sql.prepare("SELECT used FROM usage_counters WHERE bucket LIKE 'd:%'").get().used,1);
+});
+test('regular generations update status; it expires and is invalidated by key/model changes',async()=>{
+ let time=1800000000000;const s=setup({now:()=>time});await s.call(s.request());
+ assert.equal((await (await s.call(statusRequest(s))).json()).status,'available');
+ time+=300001;assert.equal((await (await s.call(statusRequest(s))).json()).status,'unknown');time-=300001;
+ s.env.GEMINI_API_KEY='another-key';assert.equal((await (await s.call(statusRequest(s))).json()).status,'unknown');
+ s.env.GEMINI_API_KEY='test-secret-not-real';s.env.GEMINI_MODEL='gemini-other';assert.equal((await (await s.call(statusRequest(s))).json()).status,'unknown');
+});
+test('provider errors give safe admin detail but only generic public health',async()=>{
+ for(const code of [400,401,403,404,429,500]){
+  const s=setup({response:()=>new Response('sensitive-provider-trace',{status:code})});s.env.ADMIN_TOKEN='a'.repeat(40);
+  const admin=await (await s.call(probeRequest(s))).json();assert(admin.saved);assert(!JSON.stringify(admin).includes('sensitive-provider-trace'));
+  const pub=await (await s.call(statusRequest(s))).json();assert.equal(pub.status,code===429?'quota':'unavailable');assert.equal(pub.detail,undefined);assert(!JSON.stringify(pub).includes('test-secret'));
+ }
+});
+test('test refuses exhausted allowance without an upstream call',async()=>{
+ const s=setup();s.env.ADMIN_TOKEN='a'.repeat(40);s.env.DAILY_LIMIT='1';await s.call(s.request());
+ assert.equal((await s.call(probeRequest(s))).status,429);assert.equal(s.calls,1);
+ assert.equal((await (await s.call(statusRequest(s))).json()).status,'quota');
+});
+test('disabled, missing configuration and broken storage never report healthy',async()=>{
+ const s=setup();s.env.LIVE_ENABLED='false';assert.equal((await (await s.call(statusRequest(s))).json()).status,'disabled');
+ s.env.LIVE_ENABLED='true';delete s.env.GEMINI_API_KEY;assert.equal((await (await s.call(statusRequest(s))).json()).status,'unavailable');
+ s.env.GEMINI_API_KEY='test';s.sql.exec('DROP TABLE usage_counters');assert.equal((await s.call(statusRequest(s))).status,503);assert.equal(s.calls,0);
+});
+test('empty test response is not healthy; status storage failure does not break generation',async()=>{
+ const s=setup({response:()=>Response.json({})});s.env.ADMIN_TOKEN='a'.repeat(40);
+ assert.equal((await (await s.call(probeRequest(s))).json()).status,'unavailable');
+ const ok=setup();ok.sql.exec('CREATE TABLE ai_health (wrong_column TEXT)');assert.equal((await ok.call(ok.request())).status,200);
+});

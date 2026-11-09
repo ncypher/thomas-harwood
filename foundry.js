@@ -67,6 +67,7 @@
     } catch (error) {
       announce(error.name === 'AbortError' ? 'That request took too long. Try later or explore the sample.' : error.message || 'Unable to connect. Try the sample.', true);
     } finally {
+      window.AIConnectionStatus?.refresh();
       clearTimeout(timer); busy = false; output.setAttribute('aria-busy', 'false');
       submit.disabled = false; sample.disabled = false; submit.textContent = 'Put it through the foundry ↗';
     }

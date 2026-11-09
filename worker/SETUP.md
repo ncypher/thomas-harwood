@@ -144,3 +144,39 @@ Behavior: 20–3,000 character brief, a contact (email or phone) required, a hid
 4. Open the inbox page, paste the same key once. It is remembered only in that browser.
 
 The key never appears in the repository or the page. Without it, the inbox routes answer 401. Anyone holding the key can read leads, so keep it in your password manager and rotate it (change the secret) if it leaks.
+
+## Shared AI connection status (both websites)
+
+Both public AI forms read `GET /api/ai-status`. This never calls Gemini and never
+returns a key, key fingerprint, raw provider response, or owner diagnostics.
+A successful generation records a healthy result; provider failures record a safe
+unavailable/quota state. Results expire after five minutes. A changed key or model
+invalidates the old result. The public indicator does not guarantee future success.
+The daily allowance is shared by both sites and takes precedence over a healthy result.
+Per-IP limits still appear on the individual request, not as a global outage.
+
+The owner inbox at `https://cureositylabs.com/inbox.html` has **Test AI connection**
+after signing in with the existing `ADMIN_TOKEN`. It posts to `/api/ai-test`, runs
+one tiny fixed generation request (16 output tokens), and returns safe diagnostics.
+Only an authenticated owner can trigger a probe. Tests consume the existing daily
+and per-IP quotas, and an atomic D1 reservation allows at most one test per UTC
+minute across all Worker instances. A successful probe verifies model generation
+access, while a normal concept request additionally verifies the concept format.
+
+### Deploy this update
+
+1. In Cloudflare, open **Workers & Pages → thomas-harwood-site → Edit code**.
+2. Replace the module with this repository's complete `worker/worker.mjs`, then deploy.
+3. Keep the existing secrets, variables, and bindings. No new key is needed.
+   The Worker creates the small `ai_health` table in the existing D1 database
+   automatically on first status read/write; no manual SQL migration is required.
+4. The GitHub Pages deployments serve `ai-status.js` and `ai-status.css` in each repo.
+5. Open the private inbox, sign in, and press **Test AI connection**. Then refresh
+   status on either public page. A rejected key will correctly report unavailable
+   until you replace it in Cloudflare; deploying this feature cannot repair a key.
+
+Public status refreshes only read the saved result. They do not force paid probes.
+Before the updated Worker is deployed, the new UI safely says **AI status unavailable**.
+The matching `ai-status.js` and `ai-status.css` files in both repos must stay in sync.
+
+Validation: `node --test tests/*.test.mjs`.

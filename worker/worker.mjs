@@ -162,6 +162,85 @@ async function handleInbox(request, env, path) {
   throw new Failure(405, 'That action is not supported.');
 }
 
+/* ---------- Shared AI health; public reads never call Gemini ---------- */
+const HEALTH_TTL = 5 * 60 * 1000;
+const HEALTH_TABLE = `CREATE TABLE IF NOT EXISTS ai_health (
+  id INTEGER PRIMARY KEY CHECK (id = 1), scope TEXT NOT NULL,
+  state TEXT NOT NULL, detail TEXT NOT NULL, checked_at INTEGER NOT NULL
+)`;
+const HEALTH_DETAILS = {
+  available: 'Gemini accepted a generation request for the configured model.',
+  authentication: 'Gemini authentication failed (401). Replace or verify GEMINI_API_KEY.',
+  access: 'Gemini denied access (403). Check key restrictions and API access.',
+  configuration: 'Gemini rejected the request (400). Check the key and model configuration.',
+  model: 'Gemini could not find the configured model (404). Check GEMINI_MODEL.',
+  quota: 'Gemini reported a quota or rate limit (429). Check project quota and billing.',
+  unavailable: 'Gemini is temporarily unavailable.',
+  response: 'Gemini did not return a usable response.',
+  connection: 'The request to Gemini failed or timed out.'
+};
+function providerHealth(status) {
+  return ({400:'configuration',401:'authentication',403:'access',404:'model',429:'quota'})[status] || 'unavailable';
+}
+async function healthScope(env) {
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([env.GEMINI_API_KEY, env.GEMINI_MODEL || 'gemini-3.1-flash-lite'])));
+  return Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
+}
+async function saveHealth(env, state, detail, checkedAt) {
+  // Status storage must not break an otherwise successful visitor request.
+  try {
+    await env.DB.prepare(HEALTH_TABLE).bind().run();
+    await env.DB.prepare(`INSERT INTO ai_health (id, scope, state, detail, checked_at) VALUES (1, ?1, ?2, ?3, ?4)
+      ON CONFLICT(id) DO UPDATE SET scope=excluded.scope, state=excluded.state, detail=excluded.detail, checked_at=excluded.checked_at
+      WHERE excluded.checked_at >= ai_health.checked_at`).bind(await healthScope(env), state, detail, checkedAt).run();
+    return true;
+  } catch { return false; }
+}
+async function readHealth(env, time) {
+  const base = {status:'unknown', checkedAt:null, freshForSeconds:300};
+  if (env.LIVE_ENABLED !== 'true') return {...base, status:'disabled'};
+  if (!env.GEMINI_API_KEY || !env.DB) return {...base, status:'unavailable'};
+  const limit = Math.min(100, Math.max(1, parseInt(env.DAILY_LIMIT || '50', 10) || 50));
+  const daily = await env.DB.prepare('SELECT used FROM usage_counters WHERE bucket = ?1').bind(`d:${Math.floor(time / 86400000)}`).first();
+  if (daily?.used >= limit) return {...base, status:'quota', retryAt:(Math.floor(time / 86400000) + 1) * 86400000};
+  await env.DB.prepare(HEALTH_TABLE).bind().run();
+  const row = await env.DB.prepare('SELECT scope, state, detail, checked_at FROM ai_health WHERE id = ?1').bind(1).first();
+  if (!row || row.scope !== await healthScope(env)) return base;
+  const fresh = time - row.checked_at >= 0 && time - row.checked_at < HEALTH_TTL;
+  return {...base, status:fresh ? row.state : 'unknown', checkedAt:row.checked_at};
+}
+async function testHealth(request, env, time, ctx, fetchImpl) {
+  await requireOwner(request, env);
+  if (env.LIVE_ENABLED !== 'true' || !env.GEMINI_API_KEY || !env.DB) throw new Failure(503, 'Enable live AI and configure GEMINI_API_KEY and DB first.');
+  const model = env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
+  if (!/^gemini-[a-z0-9.-]+$/.test(model)) throw new Failure(503, 'Check GEMINI_MODEL.');
+  const minute = Math.floor(time / 60000);
+  if (!await reserve(env.DB, `health:${minute}`, (minute + 2) * 60, 1)) throw new Failure(429, 'A connection test already ran this minute. Wait until the next minute.', 60);
+  // Tests share the existing daily and per-IP allowances, including failures.
+  await quota(env, request, time, ctx);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
+  let state = 'unavailable', detail = 'connection';
+  try {
+    const response = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method:'POST', signal:controller.signal,
+      headers:{'Content-Type':'application/json','x-goog-api-key':env.GEMINI_API_KEY},
+      body:JSON.stringify({contents:[{role:'user',parts:[{text:'Reply with OK.'}]}], generationConfig:{maxOutputTokens:16,candidateCount:1}})
+    });
+    if (!response.ok) {
+      detail = providerHealth(response.status);
+      state = detail === 'quota' ? 'quota' : 'unavailable';
+    } else {
+      const payload = await response.json();
+      const usable = payload.candidates?.[0]?.content?.parts?.some(p => typeof p.text === 'string' && p.text.trim() && !p.thought);
+      state = usable ? 'available' : 'unavailable'; detail = usable ? 'available' : 'response';
+    }
+  } catch { /* Only fixed diagnostic messages leave the Worker. */ }
+  finally { clearTimeout(timer); }
+  const saved = await saveHealth(env, state, detail, time);
+  return {status:state, checkedAt:time, detail:HEALTH_DETAILS[detail], saved};
+}
+
 export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = defaultSendEmail} = {}) {
   return {async fetch(request, env, ctx) {
     const origin = request.headers.get('Origin');
@@ -171,9 +250,20 @@ export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = def
     if (!origin || !allowed.includes(origin)) return reply({error: 'This origin is not allowed.'}, 403);
     headers['Access-Control-Allow-Origin'] = origin;
     const path = new URL(request.url).pathname;
+    const health = path === '/api/ai-status' || path === '/api/ai-test';
     const inbox = path === '/api/leads' || path === '/api/leads/update';
-    if (path !== '/api/foundry' && path !== '/api/lead' && !inbox) return reply({error: 'Not found.'}, 404);
-    if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: {...headers, 'Access-Control-Allow-Methods': inbox ? 'GET, POST, OPTIONS' : 'POST, OPTIONS', 'Access-Control-Allow-Headers': inbox ? 'Content-Type, Authorization' : 'Content-Type', 'Access-Control-Max-Age': '600'}});
+    if (path !== '/api/foundry' && path !== '/api/lead' && !inbox && !health) return reply({error: 'Not found.'}, 404);
+    if (request.method === 'OPTIONS') return new Response(null, {status: 204, headers: {...headers, 'Access-Control-Allow-Methods': (inbox || health) ? 'GET, POST, OPTIONS' : 'POST, OPTIONS', 'Access-Control-Allow-Headers': (inbox || health) ? 'Content-Type, Authorization' : 'Content-Type', 'Access-Control-Max-Age': '600'}});
+    if (health) {
+      try {
+        if (path === '/api/ai-status' && request.method === 'GET') return reply(await readHealth(env, now()));
+        if (path === '/api/ai-test' && request.method === 'POST') return reply(await testHealth(request, env, now(), ctx, fetchImpl));
+        return reply({error:'Method not allowed.'}, 405);
+      } catch (error) {
+        if (error instanceof Failure) return reply({error:error.message}, error.status, error.retry ? {'Retry-After':String(error.retry)} : {});
+        return reply({error:'AI status is temporarily unavailable.'}, 503);
+      }
+    }
     if (inbox) {
       try { return reply(await handleInbox(request, env, path)); }
       catch (error) {
@@ -199,7 +289,7 @@ export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = def
       await quota(env, request, now(), ctx);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 20000);
-      let result;
+      let result, providerRejected = false;
       try {
         const upstream = await fetchImpl(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST', signal: controller.signal,
@@ -208,6 +298,9 @@ export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = def
             generationConfig: {temperature: 0.65, candidateCount: 1, maxOutputTokens: 1000, responseMimeType: 'application/json', responseSchema: schema}})
         });
         if (!upstream.ok) {
+          providerRejected = true;
+          const detail = providerHealth(upstream.status);
+          await saveHealth(env, detail === 'quota' ? 'quota' : 'unavailable', detail, now());
           // Only fixed messages and the HTTP status leave the backend, never raw provider errors.
           const messages = {
             400: 'Gemini rejected the request (400). Check the API key and model configuration.',
@@ -226,10 +319,12 @@ export function createWorker({fetchImpl = fetch, now = Date.now, sendEmail = def
         try { result = validateConcept(JSON.parse(text)); }
         catch { throw new Failure(502, 'Gemini returned a concept in an unexpected format.'); }
       } catch (error) {
+        if (!providerRejected) await saveHealth(env, 'unavailable', error instanceof Failure ? 'response' : 'connection', now());
         if (error instanceof Failure) throw error;
         if (controller.signal.aborted) throw new Failure(502, 'Gemini took longer than 20 seconds to respond. Try later.');
         throw new Failure(502, 'The connection to Gemini failed. Try later.');
       } finally { clearTimeout(timer); }
+      await saveHealth(env, 'available', 'available', now());
       return reply({source: 'ai', concept: result});
     } catch (error) {
       if (error instanceof Failure) return reply({error: error.message}, error.status, error.retry ? {'Retry-After': String(error.retry)} : {});
